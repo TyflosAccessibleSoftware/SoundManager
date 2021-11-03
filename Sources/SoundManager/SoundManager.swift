@@ -32,6 +32,14 @@ final public class SystemSoundEngine {
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
     
+    public enum SoundEvent: SystemSoundID {
+case MailReceived = 1000
+        case MailSent = 1001
+        case VoicemailReceived = 1002
+        case SMSReceived = 1003
+        case SMSSent = 1004
+    }
+    
     public func muteSound(_ value : Bool) {
         soundMuted = value
     }
@@ -98,5 +106,19 @@ final public class SystemSoundEngine {
         } else {
             print("SoundEngine error:\nSound not available " + name)
         }
+    }
+    
+    public func playEvent(_ soundEventId: SystemSoundID) {
+        if soundMuted {
+            return
+        }
+        AudioServicesPlaySystemSound (soundEventId)
+    }
+    
+    public func playEvent(_ soundEvent: SoundEvent) {
+        if soundMuted {
+            return
+        }
+        AudioServicesPlaySystemSound (soundEvent.rawValue)
     }
 }
