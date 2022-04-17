@@ -37,16 +37,25 @@ final public class SystemSoundEngine {
     }
     
     public func muteVibration(_ value : Bool) {
+        guard #unavailable(macOS 10) else {
+            print("⚠️📳 vibration is only available for iOS devices")
+            return
+        }
         vibrationMuted = value
     }
     
     public func vibrate() {
+        guard #unavailable(macOS 10) else {
+            print("⚠️📳 vibration is only available for iOS devices")
+            return
+        }
         if !vibrationMuted {
             AudioServicesPlayAlertSound ( SystemSoundID ( kSystemSoundID_Vibrate ))
         }
     }
     
-    public func loadSound(_ name: String , fileName : String, fileExtension : String = "") {
+    public func loadSound(_ name: String , fileName : String,
+                          fileExtension : String = "") {
         if let soundUrl = Bundle.main.url(forResource: fileName, withExtension: fileExtension) {
             var soundId: SystemSoundID = 0
             AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
@@ -101,6 +110,10 @@ final public class SystemSoundEngine {
     }
     
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
+        guard #unavailable(macOS 10) else {
+            print("⚠️🔉 play events is not available for macOS devices")
+            return
+        }
         if soundMuted {
             return
         }

@@ -4,7 +4,7 @@ A simple framework to load and play sounds in your app.
 
 ## Supported platforms
 
-This framework is compatible with iOS, ipadOS and TvOS.
+This framework is compatible with iOS, ipadOS, TvOS, WatchOS and MacOS..
 
 ## Usage
 
