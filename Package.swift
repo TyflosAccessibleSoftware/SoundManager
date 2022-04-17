@@ -7,8 +7,8 @@ let package = Package(
     name: "SoundManager",
     platforms: [
     .iOS(.v12),
-    .watchOS(.v12),
-    .macOS(.v10),
+    .watchOS(.v2),
+    .macOS(.v10_10),
     .tvOS(.v12)
     ],
     products: [
