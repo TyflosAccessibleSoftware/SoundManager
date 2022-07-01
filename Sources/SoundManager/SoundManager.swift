@@ -110,11 +110,7 @@ final public class SystemSoundEngine {
     }
     
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
-        guard #unavailable(macOS 10) else {
-            print("⚠️🔉 play events is not available for macOS devices")
-            return
-        }
-        if soundMuted {
+                if soundMuted {
             return
         }
         AudioServicesPlaySystemSound (soundEvent.rawValue)
