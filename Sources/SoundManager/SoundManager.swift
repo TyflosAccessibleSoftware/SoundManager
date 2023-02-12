@@ -23,6 +23,9 @@
 import Foundation
 import AudioToolbox
 import AVFoundation
+#if os(macOS)
+import AppKit
+#endif
 
 public let Sounds: SystemSoundEngine = SystemSoundEngine.shared
 
@@ -114,16 +117,16 @@ final public class SystemSoundEngine {
         if soundMuted {
             return
         }
-        NSSound(named: soundEvent.rawValue)?.play()
+        NSSound(named: NSSound.Name(soundEvent.rawValue))?.play()
     }
-    #else
+#else
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
         if soundMuted {
             return
         }
         AudioServicesPlaySystemSound (soundEvent.rawValue)
     }
-    #endif
+#endif
     
 }
 
