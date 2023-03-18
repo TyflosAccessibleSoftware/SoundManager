@@ -31,6 +31,7 @@ public let Sounds: SystemSoundEngine = SystemSoundEngine.shared
 
 final public class SystemSoundEngine {
     static public let shared = SystemSoundEngine()
+    public var delegate: SoundManagerDelegate? = nil
     private var sounds = [String : SystemSoundID]()
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
@@ -63,11 +64,13 @@ final public class SystemSoundEngine {
             var soundId: SystemSoundID = 0
             AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
             AudioServicesAddSystemSoundCompletion(soundId, nil, nil, { (soundId, clientData) -> Void in
-                AudioServicesDisposeSystemSoundID(soundId)
+                if let delegateForCompletion = SystemSoundEngine.shared.delegate {
+                    delegateForCompletion.didPlaySoundCompleted()
+                }
             }, nil)
             sounds[name] = soundId
         } else {
-            print("SoundEngine error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
+            print("⚠️🎧 Error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
         }
     }
     
@@ -81,7 +84,7 @@ final public class SystemSoundEngine {
                 self.loadSound(fileName, fileName: fileName, fileExtension: withExtension)
             }
         } catch {
-            print("SoundEngine error:\nError unloading all sound files: \(error)")
+            print("⚠️🎧 Error:\nError unloading all sound files: \(error)")
         }
     }
     
@@ -90,7 +93,7 @@ final public class SystemSoundEngine {
         if soundId != nil {
             AudioServicesDisposeSystemSoundID(soundId!)
         } else {
-            print("SoundEngine error:\nError unloading sound " + name)
+            print("⚠️🎧 Error:\nError unloading sound " + name)
         }
     }
     
@@ -108,7 +111,7 @@ final public class SystemSoundEngine {
         if soundId != nil {
             AudioServicesPlaySystemSound(soundId!)
         } else {
-            print("SoundEngine error:\nSound not available " + name)
+            print("⚠️🎧 Error:\nSound not available " + name)
         }
     }
 #if os(macOS)
@@ -117,14 +120,24 @@ final public class SystemSoundEngine {
         if soundMuted {
             return
         }
-        NSSound(named: NSSound.Name(soundEvent.rawValue))?.play()
+        var sound = NSSound(named: NSSound.Name(soundEvent.rawValue))
+        guard let sound = sound else {
+            print("⚠️🎧 Error:\nSound not available " + soundEvent.rawValue)
+            return
+        }
+        sound.play()
     }
 #else
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
         if soundMuted {
             return
         }
-        AudioServicesPlaySystemSound (soundEvent.rawValue)
+        AudioServicesAddSystemSoundCompletion(soundEvent.rawValue, nil, nil, { (soundId, clientData) -> Void in
+            if let delegateForCompletion = SystemSoundEngine.shared.delegate {
+                delegateForCompletion.didPlaySoundCompleted()
+            }
+        }, nil)
+        AudioServicesPlaySystemSound(soundEvent.rawValue)
     }
 #endif
     
