@@ -64,8 +64,8 @@ final public class SystemSoundEngine {
             var soundId: SystemSoundID = 0
             AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
             AudioServicesAddSystemSoundCompletion(soundId, nil, nil, { (soundId, clientData) -> Void in
-                if let delegateForCompletion = SystemSoundEngine.shared.delegate {
-                    delegateForCompletion.didPlaySoundCompleted()
+                if let delegate = SystemSoundEngine.shared.delegate {
+                    delegate.didPlaySoundCompleted()
                 }
             }, nil)
             sounds[name] = soundId
@@ -110,6 +110,9 @@ final public class SystemSoundEngine {
         let soundId: SystemSoundID? = sounds[name]
         if soundId != nil {
             AudioServicesPlaySystemSound(soundId!)
+            if let delegate = SystemSoundEngine.shared.delegate {
+                delegate.didPlaySoundStarted(name: "\(name)")
+            }
         } else {
             print("⚠️🎧 Error:\nSound not available " + name)
         }
@@ -133,11 +136,14 @@ final public class SystemSoundEngine {
             return
         }
         AudioServicesAddSystemSoundCompletion(soundEvent.rawValue, nil, nil, { (soundId, clientData) -> Void in
-            if let delegateForCompletion = SystemSoundEngine.shared.delegate {
-                delegateForCompletion.didPlaySoundCompleted()
+            if let delegate = SystemSoundEngine.shared.delegate {
+                delegate.didPlaySoundCompleted()
             }
         }, nil)
         AudioServicesPlaySystemSound(soundEvent.rawValue)
+        if let delegate = SystemSoundEngine.shared.delegate {
+            delegate.didPlaySoundStarted(name: "\(soundEvent)")
+        }
     }
 #endif
     

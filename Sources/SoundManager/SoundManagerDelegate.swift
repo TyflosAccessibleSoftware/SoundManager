@@ -21,5 +21,6 @@
 //  THE SOFTWARE.
 
 public protocol SoundManagerDelegate {
+    func didPlaySoundStarted(name: String)
     func didPlaySoundCompleted()
 }
