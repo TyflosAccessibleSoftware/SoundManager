@@ -21,7 +21,6 @@
 //  THE SOFTWARE.
 
 import Foundation
-import AudioToolbox
 import AVFoundation
 #if os(macOS)
 import AppKit
