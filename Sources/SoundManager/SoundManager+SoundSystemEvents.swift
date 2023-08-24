@@ -25,7 +25,8 @@ import AVFoundation
 
 //MARK: SoundEvent enum declaration
 extension SystemSoundEngine {
-#if os(macOS)
+#if os(watchOS)
+#elseif os(macOS)
     public enum SoundEvent: String {
         case basso = "Basso"
         case blow = "Blow"

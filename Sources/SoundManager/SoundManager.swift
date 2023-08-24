@@ -28,6 +28,9 @@ import AppKit
 
 public let Sounds: SystemSoundEngine = SystemSoundEngine.shared
 
+#if !os(watchOS)
+import AudioToolbox
+
 final public class SystemSoundEngine {
     static public let shared = SystemSoundEngine()
     public var delegate: SoundManagerDelegate? = nil
@@ -147,4 +150,82 @@ final public class SystemSoundEngine {
 #endif
     
 }
+#else
 
+final public class SystemSoundEngine {
+    static public let shared = SystemSoundEngine()
+    public var delegate: SoundManagerDelegate? = nil
+    private var sounds = [String : SoundItem]()
+    private var soundMuted : Bool = false
+    private var vibrationMuted : Bool = false
+    
+    
+    public func muteSound(_ value : Bool) {
+        soundMuted = value
+    }
+    
+    public func muteVibration(_ value : Bool) {
+        print("⚠️📳 vibration is only available for iOS devices")
+    }
+    
+    public func vibrate() {
+        print("⚠️📳 vibration is only available for iOS devices")
+    }
+    
+    public func loadSound(_ name: String , fileName : String,
+                          fileExtension : String = "") {
+        sounds[name] = SoundItem(fileName, fileExtension: fileExtension)
+    }
+    
+    public func loadAllSounds(_ withExtension: String) {
+        let documentDir = Bundle.main.bundleURL
+        do {
+            let directoryContents = try FileManager.default.contentsOfDirectory(at: documentDir, includingPropertiesForKeys: nil)
+            let audioFiles = directoryContents.filter{ $0.pathExtension == withExtension }
+            let audioFileNames = audioFiles.map{ $0.deletingPathExtension().lastPathComponent }
+            for fileName in audioFileNames {
+                self.loadSound(fileName, fileName: fileName, fileExtension: withExtension)
+            }
+        } catch {
+            print("⚠️🎧 Error:\nError unloading all sound files: \(error)")
+        }
+    }
+    
+    public func unloadSound(_ name : String) {
+        sounds[name] = nil
+    }
+    
+    public func unloadAllSounds() {
+        for name in sounds.keys {
+            self.unloadSound(name)
+        }
+    }
+    
+    public func playSound(_ name : String) {
+        if soundMuted {
+            return
+        }
+        guard let itemSound = sounds[name] else {
+            return
+        }
+        itemSound.play()
+    }
+}
+
+final class SoundItem {
+    private var player: AVAudioPlayer
+    
+    init!(_ fileName: String,
+          fileExtension : String = "") {
+        let fileURL = Bundle.main.url(forResource: fileName, withExtension: fileExtension)
+        self.player = try! AVAudioPlayer(contentsOf: fileURL!)
+        self.player.prepareToPlay()
+    }
+    
+    func play() {
+        self.player.stop()
+        self.player.currentTime = 0
+        self.player.play()
+    }
+}
+#endif
