@@ -159,6 +159,14 @@ final public class SystemSoundEngine {
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
     
+    private init() {
+        do {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try? AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("⚠️🎧 Error:\(error.localizedDescription)")
+        }
+    }
     
     public func muteSound(_ value : Bool) {
         soundMuted = value
