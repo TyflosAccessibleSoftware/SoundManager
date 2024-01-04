@@ -26,8 +26,6 @@ import AVFoundation
 import AppKit
 #endif
 
-public let Sounds: SystemSoundEngine = SystemSoundEngine.shared
-
 #if !os(watchOS)
 import AudioToolbox
 

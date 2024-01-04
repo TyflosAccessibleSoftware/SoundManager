@@ -18,6 +18,9 @@ You can use the alias **Sounds** to manage the library.
 
 `import SoundManager
 
+// create an alias to easy access
+let Sounds = SystemSoundEngine.shared
+
 // Load the sound file once
 Sounds.loadSound("My sound", fileName: "mySampleSound.wav")
 // And play it
