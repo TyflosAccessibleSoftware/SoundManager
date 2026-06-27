@@ -4,7 +4,7 @@ A simple framework to load and play sounds in your app.
 
 ## Supported platforms
 
-This framework is compatible with iOS, ipadOS, TvOS, WatchOS and MacOS..
+This framework is compatible with iOS, ipadOS, TvOS, Vision OS, WatchOS and MacOS..
 
 ## Usage
 
@@ -27,6 +27,16 @@ Sounds.loadSound("My sound", fileName: "mySampleSound.wav")
 Sounds.playSound("My sound")
 // vibrate your device
 Sounds.vibrate()`
+
+## Documentation
+
+The documentation for tthis package is available in the **Documentation** folder.
+
+There are 3 documents:
+
+- The general information for this package is in [SoundManager.md](Documentation/SoundManager.md)
+- The information for the main class of this package is in [SystemSoundManager.md](Documentation/SystemSoundManager.md)
+- The information about the unit tests for this package is in [UnitTests.md](Documentation/UnitTests.md)
 
 ## Author
 
