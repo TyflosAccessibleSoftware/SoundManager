@@ -28,12 +28,14 @@ import AppKit
 
 #if !os(watchOS)
 import AudioToolbox
+#endif
 
+#if !os(watchOS)
 final public class SystemSoundEngine: @unchecked Sendable {
     static public let shared = SystemSoundEngine()
     private let lock = NSRecursiveLock()
     private var currentDelegate: SoundManagerDelegate? = nil
-    private var sounds = [String : SystemSoundID]()
+    private var sounds = [String : SoundItem]()
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
     
@@ -81,7 +83,7 @@ final public class SystemSoundEngine: @unchecked Sendable {
             !vibrationMuted
         }
         if shouldVibrate {
-            AudioServicesPlayAlertSound ( SystemSoundID ( kSystemSoundID_Vibrate ))
+            AudioServicesPlayAlertSound(SystemSoundID(kSystemSoundID_Vibrate))
         }
     }
     
@@ -92,28 +94,16 @@ final public class SystemSoundEngine: @unchecked Sendable {
     
     public func loadSound(_ name: String , fileName : String,
                           fileExtension : String = "", in bundle: Bundle) {
-        if let soundUrl = soundURL(fileName: fileName, fileExtension: fileExtension, in: bundle) {
-            var soundId: SystemSoundID = 0
-            let status = AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
-            guard status == noErr else {
-                print("⚠️🎧 Error:\nError loading sound " + name + "\n File is not a valid system sound:" + soundUrl.path)
-                return
+        guard let soundItem = SoundItem(fileName, fileExtension: fileExtension, in: bundle, completion: {
+            if let delegate = SystemSoundEngine.shared.delegate {
+                delegate.didPlaySoundCompleted()
             }
-            AudioServicesAddSystemSoundCompletion(soundId, nil, nil, { (soundId, clientData) -> Void in
-                if let delegate = SystemSoundEngine.shared.delegate {
-                    delegate.didPlaySoundCompleted()
-                }
-            }, nil)
-            let previousSoundId = withLock { () -> SystemSoundID? in
-                let previousSoundId = sounds[name]
-                sounds[name] = soundId
-                return previousSoundId
-            }
-            if let previousSoundId = previousSoundId {
-                AudioServicesDisposeSystemSoundID(previousSoundId)
-            }
-        } else {
+        }) else {
             print("⚠️🎧 Error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
+            return
+        }
+        withLock {
+            sounds[name] = soundItem
         }
     }
     
@@ -136,38 +126,35 @@ final public class SystemSoundEngine: @unchecked Sendable {
     }
     
     public func unloadSound(_ name : String) {
-        let soundId = withLock {
+        let soundItem = withLock {
             sounds.removeValue(forKey: name)
         }
-        if let soundId = soundId {
-            AudioServicesDisposeSystemSoundID(soundId)
-        } else {
+        if soundItem == nil {
             print("⚠️🎧 Error:\nError unloading sound " + name)
         }
     }
     
     public func unloadAllSounds() {
-        let soundIds = withLock { () -> [SystemSoundID] in
-            let soundIds = Array(sounds.values)
+        withLock {
             sounds.removeAll()
-            return soundIds
-        }
-        for soundId in soundIds {
-            AudioServicesDisposeSystemSoundID(soundId)
         }
     }
     
     public func playSound(_ name : String) {
-        let soundId = withLock {
+        playSound(name, volume: 1.0, speed: 1.0, pan: 0.0, pitch: 0.5)
+    }
+    
+    public func playSound(_ name : String, volume: Float = 1.0, speed: Float = 1.0, pan: Float = 0.0, pitch: Float = 0.5) {
+        let itemSound = withLock {
             soundMuted ? nil : sounds[name]
         }
-        guard let soundId = soundId else {
+        guard let itemSound = itemSound else {
             if !withLock({ soundMuted }) {
                 print("⚠️🎧 Error:\nSound not available " + name)
             }
             return
         }
-        AudioServicesPlaySystemSound(soundId)
+        itemSound.play(volume: volume, speed: speed, pan: pan, pitch: pitch)
         if let delegate = SystemSoundEngine.shared.delegate {
             delegate.didPlaySoundStarted(name: "\(name)")
         }
@@ -202,11 +189,6 @@ final public class SystemSoundEngine: @unchecked Sendable {
     }
 #endif
     
-    private func soundURL(fileName: String, fileExtension: String, in bundle: Bundle) -> URL? {
-        let fileExtension = fileExtension.isEmpty ? nil : fileExtension
-        return bundle.url(forResource: fileName, withExtension: fileExtension)
-    }
-    
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {
         lock.lock()
         defer {
@@ -216,7 +198,6 @@ final public class SystemSoundEngine: @unchecked Sendable {
     }
 }
 #else
-
 final public class SystemSoundEngine: @unchecked Sendable {
     static public let shared = SystemSoundEngine()
     private let lock = NSRecursiveLock()
@@ -274,7 +255,11 @@ final public class SystemSoundEngine: @unchecked Sendable {
     
     public func loadSound(_ name: String , fileName : String,
                           fileExtension : String = "", in bundle: Bundle) {
-        guard let soundItem = SoundItem(fileName, fileExtension: fileExtension, in: bundle) else {
+        guard let soundItem = SoundItem(fileName, fileExtension: fileExtension, in: bundle, completion: {
+            if let delegate = SystemSoundEngine.shared.delegate {
+                delegate.didPlaySoundCompleted()
+            }
+        }) else {
             print("⚠️🎧 Error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
             return
         }
@@ -314,13 +299,20 @@ final public class SystemSoundEngine: @unchecked Sendable {
     }
     
     public func playSound(_ name : String) {
+        playSound(name, volume: 1.0, speed: 1.0, pan: 0.0, pitch: 0.5)
+    }
+    
+    public func playSound(_ name : String, volume: Float = 1.0, speed: Float = 1.0, pan: Float = 0.0, pitch: Float = 0.5) {
         let itemSound = withLock {
             soundMuted ? nil : sounds[name]
         }
         guard let itemSound = itemSound else {
             return
         }
-        itemSound.play()
+        itemSound.play(volume: volume, speed: speed, pan: pan, pitch: pitch)
+        if let delegate = SystemSoundEngine.shared.delegate {
+            delegate.didPlaySoundStarted(name: "\(name)")
+        }
     }
     
     private func withLock<T>(_ body: () throws -> T) rethrows -> T {
@@ -331,25 +323,70 @@ final public class SystemSoundEngine: @unchecked Sendable {
         return try body()
     }
 }
+#endif
 
 final class SoundItem: @unchecked Sendable {
-    private var player: AVAudioPlayer
+    private let lock = NSRecursiveLock()
+    private let engine = AVAudioEngine()
+    private let player = AVAudioPlayerNode()
+    private let timePitch = AVAudioUnitTimePitch()
+    private let audioFile: AVAudioFile
+    private let completion: @Sendable () -> Void
     
-    init!(_ fileName: String,
-          fileExtension : String = "", in bundle: Bundle = .main) {
+    init?(_ fileName: String,
+          fileExtension : String = "", in bundle: Bundle = .main,
+          completion: @escaping @Sendable () -> Void = {}) {
         let fileExtension = fileExtension.isEmpty ? nil : fileExtension
         guard let fileURL = bundle.url(forResource: fileName, withExtension: fileExtension),
-              let player = try? AVAudioPlayer(contentsOf: fileURL) else {
+              let audioFile = try? AVAudioFile(forReading: fileURL) else {
             return nil
         }
-        self.player = player
-        self.player.prepareToPlay()
+        self.audioFile = audioFile
+        self.completion = completion
+        engine.attach(player)
+        engine.attach(timePitch)
+        engine.connect(player, to: timePitch, format: audioFile.processingFormat)
+        engine.connect(timePitch, to: engine.mainMixerNode, format: audioFile.processingFormat)
+        engine.prepare()
     }
     
-    func play() {
-        self.player.stop()
-        self.player.currentTime = 0
-        self.player.play()
+    func play(volume: Float = 1.0, speed: Float = 1.0, pan: Float = 0.0, pitch: Float = 0.5) {
+        withLock {
+            player.stop()
+            player.volume = clipped(volume, minValue: 0.0, maxValue: 1.0)
+            player.pan = clipped(pan, minValue: -1.0, maxValue: 1.0)
+            timePitch.rate = clipped(speed, minValue: 0.03125, maxValue: 32.0)
+            timePitch.pitch = normalizedPitchCents(pitch)
+            audioFile.framePosition = 0
+            player.scheduleFile(audioFile, at: nil) { [completion] in
+                completion()
+            }
+            if !engine.isRunning {
+                do {
+                    try engine.start()
+                } catch {
+                    print("⚠️🎧 Error:\nError playing sound: \(error)")
+                    return
+                }
+            }
+            player.play()
+        }
+    }
+
+    private func clipped(_ value: Float, minValue: Float, maxValue: Float) -> Float {
+        min(max(value, minValue), maxValue)
+    }
+    
+    private func normalizedPitchCents(_ pitch: Float) -> Float {
+        let normalizedPitch = clipped(pitch, minValue: 0.0, maxValue: 1.0)
+        return (normalizedPitch - 0.5) * 4800.0
+    }
+    
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return try body()
     }
 }
-#endif

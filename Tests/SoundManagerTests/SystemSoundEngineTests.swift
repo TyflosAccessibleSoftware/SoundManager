@@ -153,6 +153,62 @@ final class SystemSoundEngineTests: XCTestCase {
         Thread.sleep(forTimeInterval: 1.0)
         XCTAssertEqual(delegate.startedSoundName, "guiro")
     }
+    
+    func testPlayBeepSoundChangingPanFromLeftToRight() {
+        engine.loadSound("beep", fileName: "beep", fileExtension: "wav", in: soundBundle)
+        engine.muteSound(false)
+        
+        for step in 0...20 {
+            let pan = -1.0 + (Float(step) * 0.1)
+            engine.playSound("beep", pan: pan)
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        
+        XCTAssertEqual(engine.loadedSoundsCount, 1)
+    }
+    
+    func testPlayGuiroSoundChangingSpeedFromZeroToDoubleSpeed() {
+        engine.loadSound("guiro", fileName: "guiro", fileExtension: "wav", in: soundBundle)
+        engine.muteSound(false)
+        
+        for step in 0...20 {
+            let speed = Float(step) * 0.1
+            engine.playSound("guiro", speed: speed)
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        
+        XCTAssertEqual(engine.loadedSoundsCount, 1)
+    }
+    
+    func testPlayBeepSoundChangingPitchFromLowestToHighest() {
+        engine.loadSound("beep", fileName: "beep", fileExtension: "wav", in: soundBundle)
+        engine.muteSound(false)
+        
+        for step in 0...10 {
+            let pitch = Float(step) * 0.1
+            engine.playSound("beep", pitch: pitch)
+            Thread.sleep(forTimeInterval: 0.07)
+        }
+        
+        XCTAssertEqual(engine.loadedSoundsCount, 1)
+    }
+    
+    func testPlayGuiroSoundChangingVolume() {
+        engine.loadSound("guiro", fileName: "guiro", fileExtension: "wav", in: soundBundle)
+        engine.muteSound(false)
+        
+        engine.playSound("guiro", volume: 0.05)
+        Thread.sleep(forTimeInterval: 0.7)
+        engine.playSound("guiro", volume: 0.25)
+        Thread.sleep(forTimeInterval: 0.7)
+        engine.playSound("guiro", volume: 0.5)
+        Thread.sleep(forTimeInterval: 0.7)
+        engine.playSound("guiro", volume: 0.75)
+        Thread.sleep(forTimeInterval: 0.7)
+        engine.playSound("guiro", volume: 1.0)
+        Thread.sleep(forTimeInterval: 1.0)
+        XCTAssertEqual(engine.loadedSoundsCount, 1)
+    }
 }
 
 private final class SoundPlaybackDelegate: SoundManagerDelegate {
