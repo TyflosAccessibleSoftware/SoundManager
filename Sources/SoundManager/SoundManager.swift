@@ -29,15 +29,37 @@ import AppKit
 #if !os(watchOS)
 import AudioToolbox
 
-final public class SystemSoundEngine {
+final public class SystemSoundEngine: @unchecked Sendable {
     static public let shared = SystemSoundEngine()
-    public var delegate: SoundManagerDelegate? = nil
+    private let lock = NSRecursiveLock()
+    private var currentDelegate: SoundManagerDelegate? = nil
     private var sounds = [String : SystemSoundID]()
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
     
+    public var delegate: SoundManagerDelegate? {
+        get {
+            withLock {
+                currentDelegate
+            }
+        }
+        set {
+            withLock {
+                currentDelegate = newValue
+            }
+        }
+    }
+    
+    public var loadedSoundsCount: Int {
+        withLock {
+            sounds.count
+        }
+    }
+    
     public func muteSound(_ value : Bool) {
-        soundMuted = value
+        withLock {
+            soundMuted = value
+        }
     }
     
     public func muteVibration(_ value : Bool) {
@@ -45,7 +67,9 @@ final public class SystemSoundEngine {
             print("⚠️📳 vibration is only available for iOS devices")
             return
         }
-        vibrationMuted = value
+        withLock {
+            vibrationMuted = value
+        }
     }
     
     public func vibrate() {
@@ -53,35 +77,58 @@ final public class SystemSoundEngine {
             print("⚠️📳 vibration is only available for iOS devices")
             return
         }
-        if !vibrationMuted {
+        let shouldVibrate = withLock {
+            !vibrationMuted
+        }
+        if shouldVibrate {
             AudioServicesPlayAlertSound ( SystemSoundID ( kSystemSoundID_Vibrate ))
         }
     }
     
     public func loadSound(_ name: String , fileName : String,
                           fileExtension : String = "") {
-        if let soundUrl = Bundle.main.url(forResource: fileName, withExtension: fileExtension) {
+        loadSound(name, fileName: fileName, fileExtension: fileExtension, in: .main)
+    }
+    
+    public func loadSound(_ name: String , fileName : String,
+                          fileExtension : String = "", in bundle: Bundle) {
+        if let soundUrl = soundURL(fileName: fileName, fileExtension: fileExtension, in: bundle) {
             var soundId: SystemSoundID = 0
-            AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
+            let status = AudioServicesCreateSystemSoundID(soundUrl as CFURL, &soundId)
+            guard status == noErr else {
+                print("⚠️🎧 Error:\nError loading sound " + name + "\n File is not a valid system sound:" + soundUrl.path)
+                return
+            }
             AudioServicesAddSystemSoundCompletion(soundId, nil, nil, { (soundId, clientData) -> Void in
                 if let delegate = SystemSoundEngine.shared.delegate {
                     delegate.didPlaySoundCompleted()
                 }
             }, nil)
-            sounds[name] = soundId
+            let previousSoundId = withLock { () -> SystemSoundID? in
+                let previousSoundId = sounds[name]
+                sounds[name] = soundId
+                return previousSoundId
+            }
+            if let previousSoundId = previousSoundId {
+                AudioServicesDisposeSystemSoundID(previousSoundId)
+            }
         } else {
             print("⚠️🎧 Error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
         }
     }
     
     public func loadAllSounds(_ withExtension: String) {
-        let documentDir = Bundle.main.bundleURL
+        loadAllSounds(withExtension, in: .main)
+    }
+    
+    public func loadAllSounds(_ withExtension: String, in bundle: Bundle) {
+        let documentDir = bundle.resourceURL ?? bundle.bundleURL
         do {
             let directoryContents = try FileManager.default.contentsOfDirectory(at: documentDir, includingPropertiesForKeys: nil)
             let audioFiles = directoryContents.filter{ $0.pathExtension == withExtension }
             let audioFileNames = audioFiles.map{ $0.deletingPathExtension().lastPathComponent }
             for fileName in audioFileNames {
-                self.loadSound(fileName, fileName: fileName, fileExtension: withExtension)
+                self.loadSound(fileName, fileName: fileName, fileExtension: withExtension, in: bundle)
             }
         } catch {
             print("⚠️🎧 Error:\nError unloading all sound files: \(error)")
@@ -89,41 +136,49 @@ final public class SystemSoundEngine {
     }
     
     public func unloadSound(_ name : String) {
-        let soundId: SystemSoundID? = sounds[name]
-        if soundId != nil {
-            AudioServicesDisposeSystemSoundID(soundId!)
+        let soundId = withLock {
+            sounds.removeValue(forKey: name)
+        }
+        if let soundId = soundId {
+            AudioServicesDisposeSystemSoundID(soundId)
         } else {
             print("⚠️🎧 Error:\nError unloading sound " + name)
         }
     }
     
     public func unloadAllSounds() {
-        for name in sounds.keys {
-            self.unloadSound(name)
+        let soundIds = withLock { () -> [SystemSoundID] in
+            let soundIds = Array(sounds.values)
+            sounds.removeAll()
+            return soundIds
+        }
+        for soundId in soundIds {
+            AudioServicesDisposeSystemSoundID(soundId)
         }
     }
     
     public func playSound(_ name : String) {
-        if soundMuted {
+        let soundId = withLock {
+            soundMuted ? nil : sounds[name]
+        }
+        guard let soundId = soundId else {
+            if !withLock({ soundMuted }) {
+                print("⚠️🎧 Error:\nSound not available " + name)
+            }
             return
         }
-        let soundId: SystemSoundID? = sounds[name]
-        if soundId != nil {
-            AudioServicesPlaySystemSound(soundId!)
-            if let delegate = SystemSoundEngine.shared.delegate {
-                delegate.didPlaySoundStarted(name: "\(name)")
-            }
-        } else {
-            print("⚠️🎧 Error:\nSound not available " + name)
+        AudioServicesPlaySystemSound(soundId)
+        if let delegate = SystemSoundEngine.shared.delegate {
+            delegate.didPlaySoundStarted(name: "\(name)")
         }
     }
 #if os(macOS)
     
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
-        if soundMuted {
+        if withLock({ soundMuted }) {
             return
         }
-        var sound = NSSound(named: NSSound.Name(soundEvent.rawValue))
+        let sound = NSSound(named: NSSound.Name(soundEvent.rawValue))
         guard let sound = sound else {
             print("⚠️🎧 Error:\nSound not available " + soundEvent.rawValue)
             return
@@ -132,7 +187,7 @@ final public class SystemSoundEngine {
     }
 #else
     public func playEvent(_ soundEvent: SystemSoundEngine.SoundEvent) {
-        if soundMuted {
+        if withLock({ soundMuted }) {
             return
         }
         AudioServicesAddSystemSoundCompletion(soundEvent.rawValue, nil, nil, { (soundId, clientData) -> Void in
@@ -147,15 +202,47 @@ final public class SystemSoundEngine {
     }
 #endif
     
+    private func soundURL(fileName: String, fileExtension: String, in bundle: Bundle) -> URL? {
+        let fileExtension = fileExtension.isEmpty ? nil : fileExtension
+        return bundle.url(forResource: fileName, withExtension: fileExtension)
+    }
+    
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return try body()
+    }
 }
 #else
 
-final public class SystemSoundEngine {
+final public class SystemSoundEngine: @unchecked Sendable {
     static public let shared = SystemSoundEngine()
-    public var delegate: SoundManagerDelegate? = nil
+    private let lock = NSRecursiveLock()
+    private var currentDelegate: SoundManagerDelegate? = nil
     private var sounds = [String : SoundItem]()
     private var soundMuted : Bool = false
     private var vibrationMuted : Bool = false
+    
+    public var delegate: SoundManagerDelegate? {
+        get {
+            withLock {
+                currentDelegate
+            }
+        }
+        set {
+            withLock {
+                currentDelegate = newValue
+            }
+        }
+    }
+    
+    public var loadedSoundsCount: Int {
+        withLock {
+            sounds.count
+        }
+    }
     
     private init() {
         do {
@@ -167,7 +254,9 @@ final public class SystemSoundEngine {
     }
     
     public func muteSound(_ value : Bool) {
-        soundMuted = value
+        withLock {
+            soundMuted = value
+        }
     }
     
     public func muteVibration(_ value : Bool) {
@@ -180,17 +269,32 @@ final public class SystemSoundEngine {
     
     public func loadSound(_ name: String , fileName : String,
                           fileExtension : String = "") {
-        sounds[name] = SoundItem(fileName, fileExtension: fileExtension)
+        loadSound(name, fileName: fileName, fileExtension: fileExtension, in: .main)
+    }
+    
+    public func loadSound(_ name: String , fileName : String,
+                          fileExtension : String = "", in bundle: Bundle) {
+        guard let soundItem = SoundItem(fileName, fileExtension: fileExtension, in: bundle) else {
+            print("⚠️🎧 Error:\nError loading sound " + name + "\n File does not exist:" + fileName + " extension:" + fileExtension)
+            return
+        }
+        withLock {
+            sounds[name] = soundItem
+        }
     }
     
     public func loadAllSounds(_ withExtension: String) {
-        let documentDir = Bundle.main.bundleURL
+        loadAllSounds(withExtension, in: .main)
+    }
+    
+    public func loadAllSounds(_ withExtension: String, in bundle: Bundle) {
+        let documentDir = bundle.resourceURL ?? bundle.bundleURL
         do {
             let directoryContents = try FileManager.default.contentsOfDirectory(at: documentDir, includingPropertiesForKeys: nil)
             let audioFiles = directoryContents.filter{ $0.pathExtension == withExtension }
             let audioFileNames = audioFiles.map{ $0.deletingPathExtension().lastPathComponent }
             for fileName in audioFileNames {
-                self.loadSound(fileName, fileName: fileName, fileExtension: withExtension)
+                self.loadSound(fileName, fileName: fileName, fileExtension: withExtension, in: bundle)
             }
         } catch {
             print("⚠️🎧 Error:\nError unloading all sound files: \(error)")
@@ -198,33 +302,47 @@ final public class SystemSoundEngine {
     }
     
     public func unloadSound(_ name : String) {
-        sounds[name] = nil
+        withLock {
+            sounds[name] = nil
+        }
     }
     
     public func unloadAllSounds() {
-        for name in sounds.keys {
-            self.unloadSound(name)
+        withLock {
+            sounds.removeAll()
         }
     }
     
     public func playSound(_ name : String) {
-        if soundMuted {
-            return
+        let itemSound = withLock {
+            soundMuted ? nil : sounds[name]
         }
-        guard let itemSound = sounds[name] else {
+        guard let itemSound = itemSound else {
             return
         }
         itemSound.play()
     }
+    
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return try body()
+    }
 }
 
-final class SoundItem {
+final class SoundItem: @unchecked Sendable {
     private var player: AVAudioPlayer
     
     init!(_ fileName: String,
-          fileExtension : String = "") {
-        let fileURL = Bundle.main.url(forResource: fileName, withExtension: fileExtension)
-        self.player = try! AVAudioPlayer(contentsOf: fileURL!)
+          fileExtension : String = "", in bundle: Bundle = .main) {
+        let fileExtension = fileExtension.isEmpty ? nil : fileExtension
+        guard let fileURL = bundle.url(forResource: fileName, withExtension: fileExtension),
+              let player = try? AVAudioPlayer(contentsOf: fileURL) else {
+            return nil
+        }
+        self.player = player
         self.player.prepareToPlay()
     }
     

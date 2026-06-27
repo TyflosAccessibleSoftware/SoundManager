@@ -20,6 +20,9 @@ let package = Package(
     targets: [
         .target(
             name: "SoundManager",
-            dependencies: [])
+            dependencies: []),
+        .testTarget(
+            name: "SoundManagerTests",
+            dependencies: ["SoundManager"])
     ]
 )
