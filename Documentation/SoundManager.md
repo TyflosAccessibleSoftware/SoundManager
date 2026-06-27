@@ -101,6 +101,8 @@ Parameter ranges:
 
 Values outside the supported ranges are clipped internally.
 
+On watchOS, `pitch` is accepted by the API for source compatibility but ignored during playback because `AVAudioUnitTimePitch` is not available on watchOS.
+
 ## Loaded Sounds Count
 
 Use `loadedSoundsCount` to inspect how many sounds are currently loaded:

@@ -127,6 +127,8 @@ SystemSoundEngine.shared.playSound("beep", pitch: 0.8)
 
 Internally, the normalized pitch value is mapped to the pitch range used by `AVAudioUnitTimePitch`.
 
+On watchOS, `pitch` is accepted by the API for source compatibility but ignored during playback because `AVAudioUnitTimePitch` is not available on watchOS.
+
 ## Muting
 
 Mute or unmute regular sound playback:

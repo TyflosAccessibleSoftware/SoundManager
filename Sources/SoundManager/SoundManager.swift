@@ -226,12 +226,8 @@ final public class SystemSoundEngine: @unchecked Sendable {
     }
     
     private init() {
-        do {
-            try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
-            try? AVAudioSession.sharedInstance().setActive(true)
-        } catch {
-            print("⚠️🎧 Error:\(error.localizedDescription)")
-        }
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+        try? AVAudioSession.sharedInstance().setActive(true)
     }
     
     public func muteSound(_ value : Bool) {
@@ -325,6 +321,53 @@ final public class SystemSoundEngine: @unchecked Sendable {
 }
 #endif
 
+#if os(watchOS)
+final class SoundItem: @unchecked Sendable {
+    private let lock = NSRecursiveLock()
+    private var player: AVAudioPlayer
+    private let completion: @Sendable () -> Void
+    
+    init?(_ fileName: String,
+          fileExtension : String = "", in bundle: Bundle = .main,
+          completion: @escaping @Sendable () -> Void = {}) {
+        let fileExtension = fileExtension.isEmpty ? nil : fileExtension
+        guard let fileURL = bundle.url(forResource: fileName, withExtension: fileExtension),
+              let player = try? AVAudioPlayer(contentsOf: fileURL) else {
+            return nil
+        }
+        self.player = player
+        self.completion = completion
+        self.player.enableRate = true
+        self.player.prepareToPlay()
+    }
+    
+    func play(volume: Float = 1.0, speed: Float = 1.0, pan: Float = 0.0, pitch: Float = 0.5) {
+        withLock {
+            player.stop()
+            player.currentTime = 0
+            player.volume = clipped(volume, minValue: 0.0, maxValue: 1.0)
+            player.enableRate = true
+            player.rate = clipped(speed, minValue: 0.5, maxValue: 2.0)
+            player.pan = clipped(pan, minValue: -1.0, maxValue: 1.0)
+            // watchOS does not provide AVAudioUnitTimePitch, so pitch is intentionally ignored.
+            player.prepareToPlay()
+            player.play()
+        }
+    }
+
+    private func clipped(_ value: Float, minValue: Float, maxValue: Float) -> Float {
+        min(max(value, minValue), maxValue)
+    }
+    
+    private func withLock<T>(_ body: () throws -> T) rethrows -> T {
+        lock.lock()
+        defer {
+            lock.unlock()
+        }
+        return try body()
+    }
+}
+#else
 final class SoundItem: @unchecked Sendable {
     private let lock = NSRecursiveLock()
     private let engine = AVAudioEngine()
@@ -390,3 +433,4 @@ final class SoundItem: @unchecked Sendable {
         return try body()
     }
 }
+#endif
